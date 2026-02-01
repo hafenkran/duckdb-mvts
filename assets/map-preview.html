@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>DuckDB Vector Tiles – {{ tableName }}</title>
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --primary-light: #60a5fa;
+      --success: #10b981;
+      --success-light: #34d399;
+      --error: #ef4444;
+      --error-light: #f87171;
+      --warning: #f59e0b;
+      --bg: #0f172a;
+      --bg-light: #1e293b;
+      --card: rgba(255, 255, 255, 0.92);
+      --text: #0f172a;
+      --text-light: #64748b;
+      --border: #e2e8f0;
+      --shadow: rgba(0, 0, 0, 0.1);
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+    }
+
+    .panel {
+      position: absolute;
+      z-index: 2;
+      top: 24px;
+      left: 24px;
+      background: var(--card);
+      backdrop-filter: blur(12px);
+      padding: 1.5rem;
+      border-radius: 16px;
+      box-shadow: 0 24px 50px rgba(15, 23, 42, 0.16), 0 0 0 1px rgba(148, 163, 184, 0.2);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      max-width: 420px;
+      min-width: 320px;
+      animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .panel-header {
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      justify-content: space-between;
+    }
+
+    .panel-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .panel-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+    }
+
+    .panel-header-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .panel h1 {
+      margin: 0 0 0.25rem;
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .panel-subtitle {
+      font-size: 0.8125rem;
+      color: var(--text-light);
+      font-weight: 500;
+      letter-spacing: 0.025em;
+    }
+
+    .panel-content {
+      font-size: 0.875rem;
+    }
+
+    .info-section {
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(241, 245, 249, 0.92));
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .info-label {
+      color: var(--text-light);
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+      display: block;
+    }
+
+    .info-value-container {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.625rem;
+      transition: all 0.2s ease;
+    }
+
+    .info-value-container:hover {
+      border-color: var(--primary-light);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    .info-value {
+      color: var(--text);
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+      font-size: 0.75rem;
+      word-break: break-all;
+      flex: 1;
+      line-height: 1.4;
+    }
+
+    .copy-btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 0.375rem 0.625rem;
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-weight: 500;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .copy-btn:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 14px rgba(37, 99, 235, 0.28);
+    }
+
+    .copy-btn:active {
+      transform: translateY(0);
+    }
+
+    .copy-btn.copied {
+      background: var(--success);
+    }
+
+    .status {
+      margin-bottom: 1rem;
+      padding: 0.875rem;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 500;
+      border: 1px solid;
+      transition: all 0.3s ease;
+    }
+
+    .status.hidden {
+      display: none;
+    }
+
+    .status.loading {
+      background: linear-gradient(to right, #dbeafe, #bfdbfe);
+      color: #1e40af;
+      border-color: #93c5fd;
+    }
+
+    .status.success {
+      background: linear-gradient(to right, #d1fae5, #a7f3d0);
+      color: #065f46;
+      border-color: #6ee7b7;
+    }
+
+    .status.error {
+      background: linear-gradient(to right, #fee2e2, #fecaca);
+      color: #991b1b;
+      border-color: #fca5a5;
+    }
+
+    .status-icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .status.loading .status-icon {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      width: 100%;
+      justify-content: center;
+      padding: 0.75rem 1.25rem;
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      text-decoration: none;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.3);
+    }
+
+    .back-link:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 24px rgba(37, 99, 235, 0.36);
+    }
+
+    .back-link:active {
+      transform: translateY(0);
+    }
+
+    .theme-toggle {
+      background: linear-gradient(135deg, var(--primary), var(--primary-light));
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem;
+      box-shadow: 0 6px 14px rgba(37, 99, 235, 0.3);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+    }
+
+    .theme-toggle:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 18px rgba(37, 99, 235, 0.36);
+    }
+
+    .theme-toggle:active {
+      transform: translateY(0);
+    }
+
+    .theme-icon {
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      transition: all 0.3s ease;
+    }
+
+    .theme-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .maplibregl-popup-content {
+      padding: 0;
+      min-width: 240px;
+      max-width: 400px;
+      border-radius: 14px;
+      box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      overflow: hidden;
+    }
+
+    .maplibregl-popup-tip {
+      border-top-color: #ffffff;
+    }
+
+    .maplibregl-popup-close-button {
+      font-size: 18px;
+      line-height: 1;
+      padding: 6px 8px;
+      color: #64748b;
+    }
+
+    .maplibregl-popup-close-button:hover {
+      color: #0f172a;
+      background: rgba(15, 23, 42, 0.06);
+      border-radius: 999px;
+    }
+
+    .popup-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+    }
+
+    .popup-table th,
+    .popup-table td {
+      padding: 0.625rem 0.875rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .popup-table th {
+      font-weight: 600;
+      color: var(--text-light);
+      background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.025em;
+      width: 46%;
+    }
+
+    .popup-table td {
+      color: var(--text);
+      word-break: break-word;
+      background: #ffffff;
+      font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+      font-size: 0.75rem;
+    }
+
+    .popup-table tr:last-child th,
+    .popup-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .popup-table tbody tr:hover td {
+      background: #f8fafc;
+    }
+
+    .popup-table tbody tr:nth-child(even) td {
+      background: #f9fbff;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  
+  <div class="panel" id="panel">
+    <div class="panel-header">
+      <div class="panel-header-left">
+        <div class="panel-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6l3 0l0 12l-3 0z"/>
+            <path d="M6 3l6 0l0 18l-6 0z"/>
+            <path d="M12 7l9 0l0 10l-9 0z"/>
+          </svg>
+        </div>
+        <div class="panel-header-text">
+          <h1 title="{{ tableName }}">{{ tableName }}</h1>
+          <div class="panel-subtitle">Vector Tile Preview</div>
+        </div>
+      </div>
+      
+      <!-- Theme Toggle Button -->
+      <button class="theme-toggle" id="theme-toggle" title="Toggle dark mode">
+        <div class="theme-icon" id="theme-icon">
+          <svg id="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg id="moon-icon" style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </div>
+      </button>
+    </div>
+    <div class="panel-content">
+      <div id="status" class="status error hidden">
+        <div class="status-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <span>Server unreachable. Please check that the service is running.</span>
+      </div>
+
+      <div class="info-section">
+        <label class="info-label">Tile Endpoint</label>
+        <div class="info-value-container">
+          <code class="info-value" id="tile-url"></code>
+          <button class="copy-btn" id="copy-btn" title="Copy to clipboard">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span id="copy-text">Copy</span>
+          </button>
+        </div>
+      </div>
+      
+      <a href="/" class="back-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        Back to Tables
+      </a>
+    </div>
+  </div>
+  <script>
+    const tileUrl = window.location.origin + "{{ tileUrl | safe }}";
+    document.getElementById("tile-url").textContent = tileUrl;
+
+    // Copy button functionality
+    const copyBtn = document.getElementById("copy-btn");
+    const copyText = document.getElementById("copy-text");
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(tileUrl);
+        copyBtn.classList.add("copied");
+        copyText.textContent = "Copied!";
+        setTimeout(() => {
+          copyBtn.classList.remove("copied");
+          copyText.textContent = "Copy";
+        }, 2000);
+      } catch (err) {
+        console.error("Failed to copy:", err);
+      }
+    });
+
+    // Parse bounding box from template
+    const bboxJson = {{ bbox | safe }};
+    let bounds = null;
+
+    if (bboxJson && Array.isArray(bboxJson) && bboxJson.length === 4) {
+      // bboxJson is [lon_min, lat_min, lon_max, lat_max] in WGS84
+      const [lon_min, lat_min, lon_max, lat_max] = bboxJson;
+      // Convert to MapLibre format: [[minLng, minLat], [maxLng, maxLat]]
+      bounds = [[lon_min, lat_min], [lon_max, lat_max]];
+      console.log("Bounds from server:", bboxJson);
+      console.log("Bounds for fitBounds:", bounds);
+    }
+
+    const workerCount = Math.max(2, Math.min(8, Math.floor((navigator.hardwareConcurrency || 4) / 2)));
+    
+    // Dark mode state and tile sources
+    let isDarkMode = localStorage.getItem('mapDarkMode') === 'true' || false;
+    
+    const tileSources = {
+      light: {
+        tiles: [
+          "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        ],
+        attribution: '© OpenStreetMap contributors'
+      },
+      dark: {
+        tiles: [
+          "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+          "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+          "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png"
+        ],
+        attribution: '© OpenStreetMap contributors © CARTO'
+      }
+    };
+    
+    const currentSource = isDarkMode ? tileSources.dark : tileSources.light;
+    
+    const map = new maplibregl.Map({
+      container: "map",
+      renderWorldCopies: false,
+      fadeDuration: 0,
+      pitchWithRotate: false,
+      attributionControl: true,
+      maxTileCacheSize: 256,
+      style: {
+        version: 8,
+        sources: {
+          "basemap": {
+            type: "raster",
+            tiles: currentSource.tiles,
+            tileSize: 256,
+            maxzoom: 19,
+            attribution: currentSource.attribution
+          }
+        },
+        layers: [
+          { id: "basemap-layer", type: "raster", source: "basemap", minzoom: 0, maxzoom: 19 }
+        ]
+      },
+      workerCount
+    });
+    map.prefetchZoomDelta = 0;
+    
+    // Update theme toggle button
+    const updateThemeButton = () => {
+      const sunIcon = document.getElementById('sun-icon');
+      const moonIcon = document.getElementById('moon-icon');
+      if (isDarkMode) {
+        sunIcon.style.display = 'none';
+        moonIcon.style.display = 'block';
+      } else {
+        sunIcon.style.display = 'block';
+        moonIcon.style.display = 'none';
+      }
+    };
+    
+    // Initialize button state
+    updateThemeButton();
+    
+    // Theme toggle functionality
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      isDarkMode = !isDarkMode;
+      localStorage.setItem('mapDarkMode', isDarkMode);
+      
+      const newSource = isDarkMode ? tileSources.dark : tileSources.light;
+      const source = map.getSource('basemap');
+      
+      // Update the source tiles
+      map.removeLayer('basemap-layer');
+      map.removeSource('basemap');
+      
+      map.addSource('basemap', {
+        type: 'raster',
+        tiles: newSource.tiles,
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: newSource.attribution
+      });
+      
+      map.addLayer({
+        id: 'basemap-layer',
+        type: 'raster',
+        source: 'basemap',
+        minzoom: 0,
+        maxzoom: 19
+      }, 'duckdb-fill'); // Insert before the duckdb layers
+      
+      updateThemeButton();
+    });
+
+    const statusIcons = {
+      loading: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+      </svg>`,
+      success: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>`,
+      error: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <line x1="12" y1="8" x2="12" y2="12"></line>
+        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+      </svg>`
+    };
+
+    const updateStatus = (message, type = 'loading') => {
+      const statusEl = document.getElementById("status");
+      statusEl.classList.remove("hidden");
+      statusEl.className = `status ${type}`;
+      statusEl.innerHTML = `<div class="status-icon">${statusIcons[type] || statusIcons.loading}</div><span>${message}</span>`;
+    };
+
+    const isServerUnavailable = (error) => {
+      if (!error) {
+        return false;
+      }
+      const name = (error?.name || "").toLowerCase();
+      const message = (error?.message || "").toLowerCase();
+      const status = error?.status;
+      if (name === "aborterror" || name === "aborted") {
+        return false;
+      }
+      if (message.includes("aborted") || message.includes("aborterror") || message.includes("cancelled")) {
+        return false;
+      }
+      return (
+        status === 0 ||
+        message.includes("failed to fetch") ||
+        message.includes("networkerror") ||
+        message.includes("err_connection_refused") ||
+        message.includes("load failed") ||
+        message.includes("net::err")
+      );
+    };
+
+    let hasServerError = false;
+    let errorStreak = 0;
+    let serverCheckTimer = null;
+    const healthTileUrl = tileUrl
+      .replace("{z}", "0")
+      .replace("{x}", "0")
+      .replace("{y}", "0");
+
+    const showServerError = () => {
+      if (hasServerError) {
+        return;
+      }
+      updateStatus("Server unreachable. Please check that the service is running.", "error");
+      hasServerError = true;
+      if (!serverCheckTimer) {
+        serverCheckTimer = setInterval(async () => {
+          try {
+            const response = await fetch(healthTileUrl, { cache: "no-store" });
+            if (response && typeof response.status === "number") {
+              clearServerErrorOnSuccess();
+            }
+          } catch (err) {
+            // Ignore network errors; keep banner until server responds.
+          }
+        }, 3000);
+      }
+    };
+
+    const clearServerErrorOnSuccess = () => {
+      errorStreak = 0;
+      if (!hasServerError) {
+        return;
+      }
+      const statusEl = document.getElementById("status");
+      statusEl.classList.add("hidden");
+      hasServerError = false;
+      if (serverCheckTimer) {
+        clearInterval(serverCheckTimer);
+        serverCheckTimer = null;
+      }
+    };
+
+    map.on("load", () => {
+      // Fit map to bounds if available - ensure ALL polygons are visible
+      if (bounds) {
+        const [[minLng, minLat], [maxLng, maxLat]] = bounds;
+        console.log("Fitting bounds:", bounds);
+        
+        // Use fitBounds with generous padding to ensure full extent is visible
+        // No maxZoom limit - let it zoom as needed to show everything
+        map.fitBounds(bounds, {
+          padding: { top: 50, bottom: 50, left: 50, right: 50 },
+          duration: 0
+        });
+        
+        // // Double-check after a short delay and adjust if needed
+        // setTimeout(() => {
+        //   const mapBounds = map.getBounds();
+        //   const [[mapMinLng, mapMinLat], [mapMaxLng, mapMaxLat]] = mapBounds.toArray();
+          
+        //   // Check if bounds are fully contained with a small tolerance
+        //   const tolerance = 0.0001; // Small tolerance for floating point comparison
+        //   const fullyContained = 
+        //     (mapMinLng - tolerance) <= minLng && 
+        //     (mapMinLat - tolerance) <= minLat && 
+        //     (mapMaxLng + tolerance) >= maxLng && 
+        //     (mapMaxLat + tolerance) >= maxLat;
+          
+        //   console.log("Original bounds:", { minLng, minLat, maxLng, maxLat });
+        //   console.log("Map bounds:", { mapMinLng, mapMinLat, mapMaxLng, mapMaxLat });
+        //   console.log("Fully contained:", fullyContained);
+          
+        //   // If not fully contained, fit again with more padding
+        //   if (!fullyContained) {
+        //     console.log("Bounds not fully visible, refitting with more padding...");
+        //     map.fitBounds(bounds, {
+        //       padding: { top: 100, bottom: 100, left: 100, right: 100 },
+        //       duration: 0
+        //     });
+        //   }
+        // }, 200);
+      }
+
+      map.addSource("duckdb-tiles", { type: "vector", tiles: [tileUrl], maxzoom: 22 });
+      
+      // Add source for highlighted features
+      map.addSource("highlight", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      
+      // Add layers for all geometry types
+      // Polygons (fill layer - only renders polygons)
+      map.addLayer({
+        id: "duckdb-fill",
+        type: "fill",
+        source: "duckdb-tiles",
+        "source-layer": "default",
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: {
+          "fill-color": "#2563eb",
+          "fill-opacity": 0.35
+        }
+      });
+
+      // Polygon outlines
+      map.addLayer({
+        id: "duckdb-fill-outline",
+        type: "line",
+        source: "duckdb-tiles",
+        "source-layer": "default",
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: {
+          "line-color": "#1d4ed8",
+          "line-width": 1.75,
+          "line-opacity": 0.9
+        }
+      });
+
+      // Lines (line layer - only renders LineString geometries)
+      map.addLayer({
+        id: "duckdb-line",
+        type: "line",
+        source: "duckdb-tiles",
+        "source-layer": "default",
+        filter: ["==", ["geometry-type"], "LineString"],
+        paint: {
+          "line-color": "#2563eb",
+          "line-width": 3,
+          "line-opacity": 0.9
+        }
+      });
+
+      // Points (circle layer - only renders Point geometries)
+      map.addLayer({
+        id: "duckdb-point",
+        type: "circle",
+        source: "duckdb-tiles",
+        "source-layer": "default",
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-color": "#2563eb",
+          "circle-radius": 7,
+          "circle-stroke-width": 2.5,
+          "circle-stroke-color": "#ffffff",
+          "circle-opacity": 0.85
+        }
+      });
+
+      // Highlight layers (on top of regular layers)
+      // Only fill layer for polygons
+      map.addLayer({
+        id: "highlight-fill",
+        type: "fill",
+        source: "highlight",
+        filter: ["==", ["geometry-type"], "Polygon"],
+        paint: {
+          "fill-color": "#f59e0b",
+          "fill-opacity": 0.5,
+          "fill-outline-color": "#f59e0b"
+        }
+      });
+
+      // Only line layer for LineStrings
+      map.addLayer({
+        id: "highlight-line",
+        type: "line",
+        source: "highlight",
+        filter: ["==", ["geometry-type"], "LineString"],
+        paint: {
+          "line-color": "#f59e0b",
+          "line-width": 5,
+          "line-opacity": 1
+        }
+      });
+
+      // Only circle layer for Points
+      map.addLayer({
+        id: "highlight-point",
+        type: "circle",
+        source: "highlight",
+        filter: ["==", ["geometry-type"], "Point"],
+        paint: {
+          "circle-color": "#f59e0b",
+          "circle-radius": 12,
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#ffffff",
+          "circle-opacity": 1
+        }
+      });
+
+    });
+
+    // Hover effects for better interactivity
+    let hoveredFeatureId = null;
+    map.on("mousemove", (e) => {
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: ["duckdb-fill", "duckdb-fill-outline", "duckdb-line", "duckdb-point"]
+      });
+      
+      if (features.length > 0) {
+        map.getCanvas().style.cursor = "pointer";
+      } else {
+        map.getCanvas().style.cursor = "";
+      }
+    });
+
+    const popup = new maplibregl.Popup({ 
+      closeButton: true, 
+      closeOnClick: true,
+      className: "custom-popup"
+    });
+
+    // Function to highlight a feature
+    const highlightFeature = (feature) => {
+      const source = map.getSource("highlight");
+      if (source) {
+        source.setData({
+          type: "FeatureCollection",
+          features: [feature]
+        });
+      }
+    };
+
+    // Function to clear highlight
+    const clearHighlight = () => {
+      const source = map.getSource("highlight");
+      if (source) {
+        source.setData({
+          type: "FeatureCollection",
+          features: []
+        });
+      }
+    };
+
+    map.on("click", (e) => {
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: ["duckdb-fill", "duckdb-fill-outline", "duckdb-line", "duckdb-point"]
+      });
+      
+      if (!features.length) {
+        popup.remove();
+        clearHighlight();
+        return;
+      }
+
+      const f = features[0];
+      
+      // Highlight the clicked feature
+      const geometry = JSON.parse(JSON.stringify(f.geometry));
+      highlightFeature({
+        type: "Feature",
+        geometry: geometry,
+        properties: {}
+      });
+
+      const props = Object.entries(f.properties || {})
+        .filter(([k]) => k !== 'geom') // Exclude geometry property
+        .map(([k, v]) => {
+          const value = v === null || v === undefined ? '<em>null</em>' : String(v);
+          return `<tr><th>${k}</th><td>${value}</td></tr>`;
+        })
+        .join("");
+
+      const html = props
+        ? `<table class="popup-table"><tbody>${props}</tbody></table>`
+        : "<div style='padding: 0.5rem; color: var(--text-light);'>No properties available</div>";
+      
+      popup.setLngLat(e.lngLat).setHTML(html).addTo(map);
+    });
+
+    // Clear highlight when popup is closed
+    popup.on("close", () => {
+      clearHighlight();
+    });
+
+    map.on("error", (e) => {
+      console.error("Map error", e);
+      if (e.sourceId !== "duckdb-tiles") {
+        return;
+      }
+      if (isServerUnavailable(e.error)) {
+        errorStreak += 1;
+        if (errorStreak >= 2) {
+          showServerError();
+        }
+      }
+    });
+
+    map.on("sourcedata", (e) => {
+      if (e.sourceId === "duckdb-tiles" && e.isSourceLoaded && !hasServerError) {
+        errorStreak = 0;
+      }
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    // Keep the info panel aligned on resize
+    const panel = document.getElementById("panel");
+    const resizeObserver = new ResizeObserver(() => {
+      panel.style.maxWidth = `${Math.min(window.innerWidth - 40, 400)}px`;
+    });
+    resizeObserver.observe(document.body);
+  </script>
+</body>
+</html>
