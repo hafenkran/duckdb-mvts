@@ -16,12 +16,13 @@ Start DuckDB with unsigned extensions enabled and load the local build:
 duckdb -unsigned
 ```
 
-This extension relies on DuckDB Spatial functions to build tiles and compute bounds. Make sure the spatial extension is installed and loaded before using MVTS. Then set the custom repository and install the extension:
+This extension targets DuckDB `v1.5.0`. The `GEOMETRY` type is built into DuckDB core in `v1.5`, but MVTS still relies on DuckDB Spatial functions to build tiles and compute bounds. Make sure the spatial extension is installed and loaded before using MVTS. Then set the custom repository and install the extension:
 
 ```sql
 -- Install and load the spatial extension
 INSTALL spatial;
 LOAD spatial;
+SET geometry_always_xy = true;
 
 -- Set the custom repository, then install and load the DuckDB BigQuery extension
 SET custom_extension_repository = 'http://storage.googleapis.com/hafenkran';
@@ -108,9 +109,7 @@ SELECT mvts_stop();
 
 ## QGIS connection (coming soon)
 
-Connecting directly from QGIS does not work yet due to a bug in DuckDB Spatial. See [duckdb-spatial#731](https://github.com/duckdb/duckdb-spatial/issues/731).
-
-The fix is merged and expected to ship with DuckDB 1.4.4.
+Direct QGIS connectivity is still experimental. Track current status in [duckdb-spatial#731](https://github.com/duckdb/duckdb-spatial/issues/731).
 
 ## HTTP API
 
@@ -141,7 +140,7 @@ These settings are read at runtime and allow you to control tile range and loggi
 
 ## Known limitations
 
-- Geometry columns must currently be in Web Mercator (`EPSG:3857`); CRS-aware/parameterized geometry types are tracked in [this](https://www.github.com/duckdb/duckdb-spatial/issues/441) issue (tagged for DuckDB v1.5).
+- Geometry columns must currently be in Web Mercator (`EPSG:3857`) for MVTS tile generation.
 - Zoom range enforcement is static via environment variables.
 - Bounds are derived from the first geometry column only.
 - Some property types are cast to `VARCHAR`, which may lose type information.
@@ -164,6 +163,8 @@ To prepare a local test environment with the DuckDB CLI and NYC example data (do
 ```sh
 make prepare-testenv
 ```
+
+By default, `make prepare-testenv` downloads DuckDB CLI `v1.5.0` to match this extension's target version.
 
 The `debug-run` target will use `scripts/import_testenv.sql` and skip imports if the test data is missing.
 
