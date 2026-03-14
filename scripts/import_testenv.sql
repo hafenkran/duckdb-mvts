@@ -1,8 +1,10 @@
 -- Import statements for all NYC dataset shapefiles
 -- All geometries are transformed from EPSG:26918 to EPSG:3857 (Web Mercator)
 
--- Load spatial extension
+-- Ensure spatial extension is available for this DuckDB version/platform
+INSTALL spatial;
 LOAD spatial;
+SET geometry_always_xy = true;
 
 -- nyc_streets
 CREATE OR REPLACE TABLE nyc_streets AS
