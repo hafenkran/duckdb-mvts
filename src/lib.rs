@@ -6,7 +6,6 @@ pub(crate) mod api;
 pub(crate) mod server;
 pub(crate) mod store;
 
-use duckdb::ffi;
 use duckdb::{Connection, Result};
 use duckdb_loadable_macros::duckdb_entrypoint_c_api;
 use server::{ServerStatusScalar, StartServerScalar, StopServerScalar};
