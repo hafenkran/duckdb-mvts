@@ -15,10 +15,10 @@ concurrency:
 jobs:
   duckdb-stable-build:
     name: Build extension binaries
-    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@main
+    uses: duckdb/extension-ci-tools/.github/workflows/_extension_distribution.yml@v1.5.0
     with:
-      duckdb_version: v1.4.4
-      ci_tools_version: v1.4.4
+      duckdb_version: v1.5.0
+      ci_tools_version: v1.5.0
       extension_name: mvts
       extra_toolchains: rust;python3
       exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads;linux_arm64;linux_amd64_musl'
@@ -31,8 +31,8 @@ jobs:
     uses: ./.github/workflows/_extension_deploy.yml
     with:
       extension_name: mvts
-      duckdb_version: v1.4.4
-      ci_tools_version: v1.4.4
+      duckdb_version: v1.5.0
+      ci_tools_version: v1.5.0
       exclude_archs: 'wasm_mvp;wasm_eh;wasm_threads;linux_arm64;linux_amd64_musl'
       deploy_latest: true
       deploy_versioned: true

@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 TARGET_BIN="${REPO_DIR}/testenv/duckdb"
+DUCKDB_VERSION="${1:-${DUCKDB_VERSION:-v1.5.0}}"
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "curl is required to download DuckDB." >&2
@@ -45,8 +46,13 @@ trap cleanup EXIT
 zip_path="${tmp_dir}/${asset}"
 extract_dir="${tmp_dir}/extract"
 
-echo "Downloading latest DuckDB CLI (${asset})..."
-curl -L -o "${zip_path}" "https://github.com/duckdb/duckdb/releases/latest/download/${asset}"
+download_url="https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/${asset}"
+if [[ "${DUCKDB_VERSION}" == "latest" ]]; then
+  download_url="https://github.com/duckdb/duckdb/releases/latest/download/${asset}"
+fi
+
+echo "Downloading DuckDB CLI (${DUCKDB_VERSION}, ${asset})..."
+curl -L -o "${zip_path}" "${download_url}"
 
 echo "Extracting DuckDB CLI..."
 unzip -q "${zip_path}" -d "${extract_dir}"
