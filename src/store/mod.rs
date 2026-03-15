@@ -24,6 +24,24 @@ pub(crate) fn quote_identifier(s: &str) -> String {
     format!("\"{}\"", s.replace('"', "\"\""))
 }
 
+/// Escape a SQL string literal.
+pub(crate) fn quote_string_literal(s: &str) -> String {
+    format!("'{}'", s.replace('\'', "''"))
+}
+
+/// Build a geometry SQL expression that is guaranteed to be in EPSG:3857.
+/// If source CRS is missing, geometry is assumed to already be in EPSG:3857.
+pub(crate) fn webmercator_geometry_expr(raw_geom_expr: &str, source_crs: Option<&str>) -> String {
+    match source_crs {
+        Some(crs) if !crs.is_empty() && !crs.eq_ignore_ascii_case("EPSG:3857") => format!(
+            "ST_Transform({}, {}, 'EPSG:3857', true)",
+            raw_geom_expr,
+            quote_string_literal(crs)
+        ),
+        _ => raw_geom_expr.to_string(),
+    }
+}
+
 /// Format a list of columns as a SELECT clause
 /// 
 /// # Arguments

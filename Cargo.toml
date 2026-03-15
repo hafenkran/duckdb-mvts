@@ -21,9 +21,9 @@ path = "src/wasm_lib.rs"
 crate-type = ["staticlib"]
 
 [dependencies]
-duckdb = { version = "1.4.3", features = ["vtab-loadable", "vscalar"] }
-duckdb-loadable-macros = "0.1.12"
-libduckdb-sys = { version = "1.4.3", features = ["loadable-extension"] }
+duckdb = { version = "=1.10500.0", features = ["vtab-loadable", "vscalar"] }
+duckdb-loadable-macros = "=1.10500.0"
+libduckdb-sys = { version = "=1.10500.0", features = ["loadable-extension"] }
 axum = { version = "0.8.7", features = ["json"] }
 tokio = { version = "1.37", features = ["rt-multi-thread", "sync"] }
 serde = { version = "1.0", features = ["derive"] }

@@ -9,7 +9,8 @@ EXTENSION_NAME=mvts
 USE_UNSTABLE_C_API=1
 
 # Target DuckDB version
-TARGET_DUCKDB_VERSION=v1.4.3
+TARGET_DUCKDB_VERSION=v1.5.0
+DUCKDB_CLI_VERSION ?= $(TARGET_DUCKDB_VERSION)
 
 EXTENSION_FILE := $(PROJ_DIR)build/debug/extension/mvts/mvts.duckdb_extension
 DUCKDB_BIN ?= $(PROJ_DIR)testenv/duckdb
@@ -55,7 +56,7 @@ release-run: release run
 .PHONY: prepare-testenv
 prepare-testenv:
 	@$(PROJ_DIR)scripts/fetch_nyc_example_dataset.sh
-	@$(PROJ_DIR)scripts/fetch_latest_duckdb.sh
+	@$(PROJ_DIR)scripts/fetch_latest_duckdb.sh "$(DUCKDB_CLI_VERSION)"
 
 .PHONY: run
 run: $(EXTENSION_FILE)

@@ -6,16 +6,25 @@ pub(crate) mod api;
 pub(crate) mod server;
 pub(crate) mod store;
 
-use duckdb::ffi;
 use duckdb::{Connection, Result};
 use duckdb_loadable_macros::duckdb_entrypoint_c_api;
 use server::{ServerStatusScalar, StartServerScalar, StopServerScalar};
 use std::error::Error;
+use std::io;
 
 #[duckdb_entrypoint_c_api()]
 pub unsafe fn extension_entrypoint(con: Connection) -> Result<(), Box<dyn Error>> {
     // Initialize logger
     utils::logger::init();
+
+    // Fail fast if spatial is unavailable. This avoids deferred runtime errors
+    // when ST_* functions are first used.
+    con.execute_batch("LOAD spatial;").map_err(|e| {
+        let msg = format!(
+            "mvts requires DuckDB spatial extension. Run: INSTALL spatial; LOAD spatial; ({e})"
+        );
+        Box::<dyn Error>::from(io::Error::other(msg))
+    })?;
 
     // Register server functions
     con.register_scalar_function::<StartServerScalar>("mvts_start")

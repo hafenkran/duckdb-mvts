@@ -28,10 +28,11 @@ pub(crate) fn query_tile(
     let conn = connection.lock().unwrap();
 
     // Fetch geometry column and property columns
-    let (geom_col, property_cols_with_types) = {
+    let (geom_col, geom_crs, property_cols_with_types) = {
         let geom_col = fetch_geometry_column(&conn, table_ref)?;
+        let geom_crs = fetch_geometry_column_crs(&conn, table_ref, &geom_col)?;
         let property_cols = fetch_property_columns(&conn, table_ref)?;
-        (geom_col, property_cols)
+        (geom_col, geom_crs, property_cols)
     };
 
     // Extract column names for SELECT clause
@@ -42,12 +43,15 @@ pub(crate) fn query_tile(
         .collect();
 
     let quoted_geom_col = crate::store::quote_identifier(&geom_col);
+    let source_geom_expr = format!("t.{}", quoted_geom_col);
+    let webmercator_geom_expr =
+        crate::store::webmercator_geometry_expr(&source_geom_expr, geom_crs.as_deref());
     let select_properties =
         crate::store::format_select_columns(&property_col_names, Some("t"), ",\n");
     let clip_geometry = crate::utils::env::get_clip_geometries();
     let geom_expr = format!(
-        "ST_AsMVTGeom(ST_MakeValid(t.{}), bounds_box, 4096, 256, {})",
-        quoted_geom_col, clip_geometry
+        "ST_AsMVTGeom(ST_MakeValid({}), bounds_box, 4096, 256, {})",
+        webmercator_geom_expr, clip_geometry
     );
     let struct_fields = crate::store::format_struct_fields(&property_cols_with_types, "geom");
 
@@ -85,7 +89,7 @@ pub(crate) fn query_tile(
             SELECT {}{} AS geom,
                 tile.bounds_box AS bounds_box
             FROM {} AS t, tile
-            WHERE ST_Intersects(t.{}, tile.bounds)
+            WHERE ST_Intersects({}, tile.bounds)
             LIMIT {}
         ),
         mvt AS (
@@ -105,7 +109,7 @@ pub(crate) fn query_tile(
         select_prefix,
         geom_expr,
         qualified_table,
-        quoted_geom_col,
+        webmercator_geom_expr,
         max_features,
         struct_fields
     );
@@ -126,6 +130,36 @@ pub(crate) fn query_tile(
     };
 
     Ok(tile_data)
+}
+
+fn fetch_geometry_column_crs(
+    conn: &Connection,
+    table_ref: &TableRef,
+    geometry_column: &str,
+) -> Result<Option<String>, StoreError> {
+    let quoted_table = table_ref.to_quoted_string();
+    let quoted_geom = crate::store::quote_identifier(geometry_column);
+    let sql = format!(
+        "
+        SELECT ST_CRS({0})
+        FROM {1}
+        WHERE {0} IS NOT NULL
+          AND ST_IsEmpty({0}) = FALSE
+        LIMIT 1
+        ",
+        quoted_geom, quoted_table
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let mut rows = stmt.query([])?;
+
+    match rows.next()? {
+        Some(row) => {
+            let crs: Option<String> = row.get(0)?;
+            Ok(crs)
+        }
+        None => Ok(None),
+    }
 }
 
 fn fetch_property_columns(

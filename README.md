@@ -16,12 +16,13 @@ Start DuckDB with unsigned extensions enabled and load the local build:
 duckdb -unsigned
 ```
 
-This extension relies on DuckDB Spatial functions to build tiles and compute bounds. Make sure the spatial extension is installed and loaded before using MVTS. Then set the custom repository and install the extension:
+This extension targets DuckDB `v1.5.0`. The `GEOMETRY` type is built into DuckDB core in `v1.5`, but MVTS still relies on DuckDB Spatial functions to build tiles and compute bounds. Make sure the spatial extension is installed and loaded before using MVTS. Then set the custom repository and install the extension:
 
 ```sql
 -- Install and load the spatial extension
 INSTALL spatial;
 LOAD spatial;
+SET geometry_always_xy = true;
 
 -- Set the custom repository, then install and load the DuckDB BigQuery extension
 SET custom_extension_repository = 'http://storage.googleapis.com/hafenkran';
@@ -40,7 +41,7 @@ SELECT mvts_start(8080);
 
 Open the UI in your browser: http://localhost:8080/
 
-> Note: The UI only lists tables that include a `GEOMETRY` column, and you must ensure your data uses the correct CRS (Web Mercator, `EPSG:3857`).
+> Note: The UI only lists tables that include a `GEOMETRY` column. Ensure the geometry column has correct CRS metadata (`ST_CRS`), because MVTS uses it to normalize to Web Mercator for tiling.
 
 <div align="center">
 
@@ -48,20 +49,18 @@ Open the UI in your browser: http://localhost:8080/
 
 </div>
 
-## Geometry prep (example)
+## Geometry CRS prep (recommended)
 
-MVTS expects (!) geometries in Web Mercator (`EPSG:3857`). If your source table is in another CRS, you can also create a view on top that transforms the `GEOMETRY` column for tiling.
+MVTS normalizes geometries to Web Mercator (`EPSG:3857`) internally when needed. In most cases, you should not pre-transform geometries yourself. Instead, make sure the geometry column has the correct CRS metadata.
 
 ```sql
--- Example: transform WGS84 (EPSG:4326) to Web Mercator (EPSG:3857)
-CREATE VIEW my_schema.my_table_3857 AS
-SELECT
-  * EXCLUDE geom,
-  ST_Transform(geom, 'EPSG:4326', 'EPSG:3857') AS geom
-FROM my_schema.my_table;
+-- If coordinates are WGS84 (lon/lat), set CRS metadata to EPSG:4326.
+UPDATE my_schema.my_table
+SET geom = ST_SetCRS(geom, 'EPSG:4326')
+WHERE geom IS NOT NULL;
 ```
 
-Use the view name in URLs (as `schema.table`), e.g. `my_schema.my_table_3857`.
+When CRS metadata is present and not `EPSG:3857`, MVTS transforms at query time. If CRS metadata is missing, MVTS currently assumes `EPSG:3857`.
 
 ## SQL functions
 
@@ -108,9 +107,7 @@ SELECT mvts_stop();
 
 ## QGIS connection (coming soon)
 
-Connecting directly from QGIS does not work yet due to a bug in DuckDB Spatial. See [duckdb-spatial#731](https://github.com/duckdb/duckdb-spatial/issues/731).
-
-The fix is merged and expected to ship with DuckDB 1.4.4.
+Direct QGIS connectivity is still experimental. Track current status in [duckdb-spatial#731](https://github.com/duckdb/duckdb-spatial/issues/731).
 
 ## HTTP API
 
@@ -141,7 +138,7 @@ These settings are read at runtime and allow you to control tile range and loggi
 
 ## Known limitations
 
-- Geometry columns must currently be in Web Mercator (`EPSG:3857`); CRS-aware/parameterized geometry types are tracked in [this](https://www.github.com/duckdb/duckdb-spatial/issues/441) issue (tagged for DuckDB v1.5).
+- Geometry columns should have correct CRS metadata. If CRS is missing, MVTS currently assumes `EPSG:3857`.
 - Zoom range enforcement is static via environment variables.
 - Bounds are derived from the first geometry column only.
 - Some property types are cast to `VARCHAR`, which may lose type information.
@@ -164,6 +161,8 @@ To prepare a local test environment with the DuckDB CLI and NYC example data (do
 ```sh
 make prepare-testenv
 ```
+
+By default, `make prepare-testenv` downloads DuckDB CLI `v1.5.0` to match this extension's target version.
 
 The `debug-run` target will use `scripts/import_testenv.sql` and skip imports if the test data is missing.
 

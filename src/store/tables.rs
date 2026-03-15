@@ -145,8 +145,10 @@ fn calculate_bounds(
         Err(_) => return Ok(None), // No geometry column found
     };
 
-    // Calculate bounds using the new fetch method
-    let bounds_result = fetch_extent_for_geometry_column(conn, table_ref, &geometry_column);
+    // Determine CRS from data and normalize to WebMercator when needed.
+    let geometry_crs = fetch_geometry_column_crs(conn, table_ref, &geometry_column)?;
+    let bounds_result =
+        fetch_extent_for_geometry_column(conn, table_ref, &geometry_column, geometry_crs.as_deref());
 
     match bounds_result {
         Ok(bounds) => {
@@ -165,6 +167,32 @@ fn calculate_bounds(
         Err(e) => {
             Err(e)
         }
+    }
+}
+
+fn fetch_geometry_column_crs(
+    conn: &Connection,
+    table_ref: &TableRef,
+    geometry_column: &str,
+) -> Result<Option<String>, duckdb::Error> {
+    let quoted_table = table_ref.to_quoted_string();
+    let quoted_geom = super::quote_identifier(geometry_column);
+    let sql = format!(
+        r#"
+        SELECT ST_CRS({})
+        FROM {}
+        WHERE {} IS NOT NULL
+          AND ST_IsEmpty({}) = FALSE
+        LIMIT 1
+        "#,
+        quoted_geom, quoted_table, quoted_geom, quoted_geom
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let mut rows = stmt.query([])?;
+    match rows.next()? {
+        Some(row) => row.get(0),
+        None => Ok(None),
     }
 }
 
@@ -270,9 +298,11 @@ fn fetch_extent_for_geometry_column(
     conn: &Connection,
     table_ref: &TableRef,
     geometry_column: &str,
+    geometry_crs: Option<&str>,
 ) -> Result<[f64; 4], duckdb::Error> {
     let quoted_table = table_ref.to_quoted_string();
     let quoted_geom = super::quote_identifier(geometry_column);
+    let geom_expr = super::webmercator_geometry_expr(&quoted_geom, geometry_crs);
     let sql = format!(
         r#"
         SELECT 
@@ -287,9 +317,9 @@ fn fetch_extent_for_geometry_column(
         AND ST_YMin({}) != 0
         AND ST_XMax({}) != 0
         AND ST_YMax({}) != 0"#,
-        quoted_geom, quoted_geom, quoted_geom, quoted_geom, 
+        geom_expr, geom_expr, geom_expr, geom_expr, 
         quoted_table, quoted_geom, quoted_geom, 
-        quoted_geom, quoted_geom, quoted_geom, quoted_geom,
+        geom_expr, geom_expr, geom_expr, geom_expr,
     );
 
     conn.prepare(&sql)?.query_row([], |row| {
